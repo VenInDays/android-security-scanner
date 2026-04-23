@@ -18,6 +18,9 @@ import java.security.cert.X509Certificate;
 import java.util.Calendar;
 import java.util.Date;
 
+import android.content.Intent;
+import android.net.Uri;
+
 import javax.security.auth.x500.X500Principal;
 
 /**
@@ -120,7 +123,7 @@ public class CertUtils {
             // Serial number
             byte[] serial = derInteger(BigInteger.valueOf(System.currentTimeMillis()).toByteArray());
             // Signature algorithm: SHA256withRSA (OID 1.2.840.113549.1.1.11)
-            byte[] sigAlg = derSequence(derOid(new byte[]{42, (byte) 134, 72, (byte) 134, 247, 13, 1, 1, 11}));
+            byte[] sigAlg = derSequence(derOid(new byte[]{(byte)42, (byte)134, (byte)72, (byte)134, (byte)247, 13, 1, 1, 11}));
             // Issuer
             byte[] issuer = buildDistinguishedName("Security Scanner CA");
             // Validity
@@ -225,7 +228,7 @@ public class CertUtils {
     private static byte[] assembleCertDer(byte[] tbs, byte[] signature, KeyPair keyPair) {
         try {
             // Signature algorithm
-            byte[] sigAlg = derSequence(derOid(new byte[]{42, (byte) 134, 72, (byte) 134, 247, 13, 1, 1, 11}));
+            byte[] sigAlg = derSequence(derOid(new byte[]{(byte)42, (byte)134, (byte)72, (byte)134, (byte)247, 13, 1, 1, 11}));
             // Signature value
             byte[] sigValue = derBitString(signature);
 
