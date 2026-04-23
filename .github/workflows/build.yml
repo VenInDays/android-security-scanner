@@ -29,65 +29,38 @@ jobs:
         restore-keys: |
           gradle-${{ runner.os }}-
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
 
-    - name: Create gradle wrapper
+    - name: Generate Gradle Wrapper
       run: |
         mkdir -p gradle/wrapper
-        cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+        curl -sL https://raw.githubusercontent.com/gradle/gradle/v7.5.1/gradlew -o gradlew
+        curl -sL https://raw.githubusercontent.com/gradle/gradle/v7.5.1/gradlew.bat -o gradlew.bat
+        cat > gradle/wrapper/gradle-wrapper.properties << 'WRAPPEREOF'
         distributionBase=GRADLE_USER_HOME
         distributionPath=wrapper/dists
         distributionUrl=https\://services.gradle.org/distributions/gradle-7.5.1-bin.zip
         zipStoreBase=GRADLE_USER_HOME
         zipStorePath=wrapper/dists
-        EOF
-
-    - name: Install Gradle
-      run: |
-        wget -q https://services.gradle.org/distributions/gradle-7.5.1-bin.zip
-        unzip -q gradle-7.5.1-bin.zip
-        export PATH=$PWD/gradle-7.5.1/bin:$PATH
-        gradle wrapper --gradle-version 7.5.1
+        WRAPPEREOF
+        chmod +x gradlew
 
     - name: Build Debug APK
-      run: |
-        export PATH=$PWD/gradle-7.5.1/bin:$PATH
-        gradle assembleDebug
+      run: ./gradlew assembleDebug --stacktrace
 
     - name: Build Release APK
-      run: |
-        export PATH=$PWD/gradle-7.5.1/bin:$PATH
-        gradle assembleRelease
+      run: ./gradlew assembleRelease --stacktrace
 
-    - name: Sign Release APK
-      run: |
-        # Generate keystore for signing
-        keytool -genkeypair -v \
-          -keystore release.keystore \
-          -alias securityscanner \
-          -keyalg RSA \
-          -keysize 2048 \
-          -validity 10000 \
-          -storepass security123 \
-          -keypass security123 \
-          -dname "CN=SecurityScanner, OU=Dev, O=SecurityScanner, L=Unknown, ST=Unknown, C=US"
-
-        # Create signing config
-        mkdir -p app/signing
-        cat > app/signing/signing.properties << 'EOF'
-        storeFile=../../release.keystore
-        storePassword=security123
-        keyAlias=securityscanner
-        keyPassword=security123
-        EOF
-
-    - name: Get APK info
+    - name: List APK files
       id: apk_info
       run: |
         echo "DATE=$(date +'%Y-%m-%d_%H-%M')" >> $GITHUB_OUTPUT
-        ls -la app/build/outputs/apk/debug/
-        ls -la app/build/outputs/apk/release/
+        echo "=== Debug APK ==="
+        ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug APK not found"
+        echo "=== Release APK ==="
+        ls -la app/build/outputs/apk/release/ 2>/dev/null || echo "Release APK not found"
+        find app/build/outputs -name "*.apk" -type f 2>/dev/null
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
@@ -108,7 +81,7 @@ jobs:
           - Hỗ trợ Android 8+ (API 26+)
 
           ### Hướng dẫn cài đặt:
-          1. Tải file APK
+          1. Tải file APK (app-debug.apk)
           2. Bật "Cài đặt từ nguồn không xác định" trong cài đặt
           3. Cài đặt APK
           4. Cấp quyền "Usage Access" khi app yêu cầu
@@ -119,7 +92,6 @@ jobs:
           - Quyền Usage Access (bắt buộc)
         files: |
           app/build/outputs/apk/debug/app-debug.apk
-          app/build/outputs/apk/release/app-release-unsigned.apk
         draft: false
         prerelease: false
       env:
