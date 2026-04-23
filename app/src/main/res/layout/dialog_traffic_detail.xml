@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView
+        android:id="@+id/traffic_direction"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/traffic_protocol"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#AAAAAA"
+        android:textSize="14sp"
+        android:layout_marginTop="4dp" />
+
+    <TextView
+        android:id="@+id/traffic_connection"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#CCCCCC"
+        android:textSize="14sp"
+        android:layout_marginTop="4dp"
+        android:fontFamily="monospace" />
+
+    <TextView
+        android:id="@+id/traffic_size"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#AAAAAA"
+        android:textSize="13sp"
+        android:layout_marginTop="4dp" />
+
+    <TextView
+        android:id="@+id/traffic_time"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#888888"
+        android:textSize="13sp"
+        android:layout_marginTop="2dp" />
+
+    <TextView
+        android:id="@+id/traffic_http_info"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#4CAF50"
+        android:textSize="13sp"
+        android:layout_marginTop="12dp"
+        android:visibility="gone"
+        android:fontFamily="monospace" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#333333"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Noi dung:"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="200dp"
+        android:layout_marginTop="4dp"
+        android:background="#0D0D0D"
+        android:padding="8dp">
+
+        <TextView
+            android:id="@+id/traffic_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#CCCCCC"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:visibility="gone" />
+
+    </ScrollView>
+
+</LinearLayout>

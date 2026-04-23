@@ -41,6 +41,7 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout filterBar;
     private Button filterAllBtn, filterSafeBtn, filterThreatsBtn;
     private Button scanBtn;
+    private Button liveBtn;
 
     private ExecutorService executor;
     private NetworkMonitor networkMonitor;
@@ -79,6 +80,7 @@ public class MainActivity extends AppCompatActivity {
         filterSafeBtn = findViewById(R.id.filter_safe);
         filterThreatsBtn = findViewById(R.id.filter_threats);
         scanBtn = findViewById(R.id.scan_btn);
+        liveBtn = findViewById(R.id.live_btn);
     }
 
     private void setupRecyclerView() {
@@ -123,6 +125,11 @@ public class MainActivity extends AppCompatActivity {
         filterThreatsBtn.setOnClickListener(v -> {
             adapter.setFilter(searchInput.getText().toString(), AppListAdapter.FilterMode.THREATS);
             updateFilterButtons(AppListAdapter.FilterMode.THREATS);
+        });
+
+        liveBtn.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, LiveMonitorActivity.class);
+            startActivity(intent);
         });
     }
 
@@ -319,8 +326,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (result != null) {
             threatView.setText("Muc do: " + result.getThreatLevel().getLabel());
-            threatView.setTextColor(getResources().getColor(
-                    result.getThreatLevel().getColor(), getTheme()));
+            threatView.setTextColor(result.getThreatLevel().getColor());
 
             StringBuilder issues = new StringBuilder();
             if (result.getDetectedIssues() != null && result.getDetectedIssues().length > 0) {
@@ -334,6 +340,10 @@ public class MainActivity extends AppCompatActivity {
                 issues.append("  - Hoat dong mang bat thuong (upload cao)\n");
             }
             issuesView.setText(issues.toString());
+        } else {
+            threatView.setText("Chua quet");
+            threatView.setTextColor(0xFF888888);
+            issuesView.setText("  Chua co ket qua quet.");
         }
 
         new AlertDialog.Builder(this)
