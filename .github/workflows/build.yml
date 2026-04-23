@@ -19,48 +19,25 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Cache Gradle packages
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: |
-          gradle-${{ runner.os }}-
-
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
-
-    - name: Generate Gradle Wrapper
-      run: |
-        mkdir -p gradle/wrapper
-        curl -sL https://raw.githubusercontent.com/gradle/gradle/v7.5.1/gradlew -o gradlew
-        curl -sL https://raw.githubusercontent.com/gradle/gradle/v7.5.1/gradlew.bat -o gradlew.bat
-        cat > gradle/wrapper/gradle-wrapper.properties << 'WRAPPEREOF'
-        distributionBase=GRADLE_USER_HOME
-        distributionPath=wrapper/dists
-        distributionUrl=https\://services.gradle.org/distributions/gradle-7.5.1-bin.zip
-        zipStoreBase=GRADLE_USER_HOME
-        zipStorePath=wrapper/dists
-        WRAPPEREOF
-        chmod +x gradlew
+      with:
+        gradle-version: '7.5.1'
 
     - name: Build Debug APK
-      run: ./gradlew assembleDebug --stacktrace
+      run: gradle assembleDebug --stacktrace
 
     - name: Build Release APK
-      run: ./gradlew assembleRelease --stacktrace
+      run: gradle assembleRelease --stacktrace
 
     - name: List APK files
       id: apk_info
       run: |
         echo "DATE=$(date +'%Y-%m-%d_%H-%M')" >> $GITHUB_OUTPUT
-        echo "=== Debug APK ==="
-        ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug APK not found"
-        echo "=== Release APK ==="
-        ls -la app/build/outputs/apk/release/ 2>/dev/null || echo "Release APK not found"
+        echo "=== APK files ==="
         find app/build/outputs -name "*.apk" -type f 2>/dev/null
+        ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug not found"
+        ls -la app/build/outputs/apk/release/ 2>/dev/null || echo "Release not found"
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
