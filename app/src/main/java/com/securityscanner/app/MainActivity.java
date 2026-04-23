@@ -304,53 +304,77 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showAppDetail(AppInfo appInfo, ScanResult result) {
-        View detailView = getLayoutInflater().inflate(R.layout.dialog_scan_result, null);
+        try {
+            View detailView = getLayoutInflater().inflate(R.layout.dialog_scan_result, null);
 
-        TextView nameView = detailView.findViewById(R.id.detail_name);
-        TextView packageView = detailView.findViewById(R.id.detail_package);
-        TextView versionView = detailView.findViewById(R.id.detail_version);
-        TextView networkView = detailView.findViewById(R.id.detail_network);
-        TextView lastUsedView = detailView.findViewById(R.id.detail_last_used);
-        TextView threatView = detailView.findViewById(R.id.detail_threat);
-        TextView issuesView = detailView.findViewById(R.id.detail_issues);
+            TextView nameView = detailView.findViewById(R.id.detail_name);
+            TextView packageView = detailView.findViewById(R.id.detail_package);
+            TextView versionView = detailView.findViewById(R.id.detail_version);
+            TextView networkView = detailView.findViewById(R.id.detail_network);
+            TextView lastUsedView = detailView.findViewById(R.id.detail_last_used);
+            TextView threatView = detailView.findViewById(R.id.detail_threat);
+            TextView issuesView = detailView.findViewById(R.id.detail_issues);
 
-        nameView.setText(appInfo.getAppName());
-        packageView.setText(appInfo.getPackageName());
-        versionView.setText("Phien ban: " + appInfo.getVersionName());
-        networkView.setText(
-                "Gui: " + NetworkMonitor.formatBytes(appInfo.getBytesSent())
-                        + "\nNhan: " + NetworkMonitor.formatBytes(appInfo.getBytesReceived())
-                        + "\nTong: " + NetworkMonitor.formatBytes(
-                        appInfo.getBytesSent() + appInfo.getBytesReceived()));
-        lastUsedView.setText("Lan cuoi su dung: " + NetworkMonitor.formatLastUsed(appInfo.getLastUsedTimeMs()));
+            if (nameView != null) nameView.setText(appInfo.getAppName());
+            if (packageView != null) packageView.setText(appInfo.getPackageName());
+            if (versionView != null) versionView.setText("Phien ban: " + appInfo.getVersionName());
 
-        if (result != null) {
-            threatView.setText("Muc do: " + result.getThreatLevel().getLabel());
-            threatView.setTextColor(result.getThreatLevel().getColor());
-
-            StringBuilder issues = new StringBuilder();
-            if (result.getDetectedIssues() != null && result.getDetectedIssues().length > 0) {
-                for (String issue : result.getDetectedIssues()) {
-                    issues.append("  - ").append(issue).append("\n");
+            if (networkView != null) {
+                try {
+                    networkView.setText(
+                            "Gui: " + NetworkMonitor.formatBytes(appInfo.getBytesSent())
+                                    + "\nNhan: " + NetworkMonitor.formatBytes(appInfo.getBytesReceived())
+                                    + "\nTong: " + NetworkMonitor.formatBytes(
+                                    appInfo.getBytesSent() + appInfo.getBytesReceived()));
+                } catch (Exception e) {
+                    networkView.setText("Khong the doc du lieu mang");
                 }
-            } else {
-                issues.append("  Khong phat hien van de nao.");
             }
-            if (result.isSuspiciousNetwork()) {
-                issues.append("  - Hoat dong mang bat thuong (upload cao)\n");
-            }
-            issuesView.setText(issues.toString());
-        } else {
-            threatView.setText("Chua quet");
-            threatView.setTextColor(0xFF888888);
-            issuesView.setText("  Chua co ket qua quet.");
-        }
 
-        new AlertDialog.Builder(this)
-                .setTitle("Chi tiet bao mat")
-                .setView(detailView)
-                .setPositiveButton("OK", null)
-                .show();
+            if (lastUsedView != null) {
+                lastUsedView.setText("Lan cuoi su dung: " + NetworkMonitor.formatLastUsed(appInfo.getLastUsedTimeMs()));
+            }
+
+            if (result != null) {
+                if (threatView != null) {
+                    threatView.setText("Muc do: " + result.getThreatLevel().getLabel());
+                    threatView.setTextColor(result.getThreatLevel().getColor());
+                }
+
+                StringBuilder issues = new StringBuilder();
+                if (result.getDetectedIssues() != null && result.getDetectedIssues().length > 0) {
+                    for (String issue : result.getDetectedIssues()) {
+                        issues.append("  - ").append(issue).append("\n");
+                    }
+                } else {
+                    issues.append("  Khong phat hien van de nao.");
+                }
+                if (result.isSuspiciousNetwork()) {
+                    issues.append("  - Hoat dong mang bat thuong (upload cao)\n");
+                }
+                if (issuesView != null) issuesView.setText(issues.toString());
+            } else {
+                if (threatView != null) {
+                    threatView.setText("Chua quet");
+                    threatView.setTextColor(0xFF888888);
+                }
+                if (issuesView != null) issuesView.setText("  Chua co ket qua quet.");
+            }
+
+            new AlertDialog.Builder(this)
+                    .setTitle("Chi tiet bao mat")
+                    .setView(detailView)
+                    .setPositiveButton("OK", null)
+                    .show();
+        } catch (Exception e) {
+            e.printStackTrace();
+            new AlertDialog.Builder(this)
+                    .setTitle("Chi tiet")
+                    .setMessage(appInfo.getAppName() + "\n" + appInfo.getPackageName()
+                            + "\n\nVersion: " + appInfo.getVersionName())
+                    .setPositiveButton("OK", null)
+                    .show();
+        }
     }
 
     @Override

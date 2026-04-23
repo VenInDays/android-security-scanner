@@ -45,30 +45,32 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: v1.0.0-${{ steps.apk_info.outputs.DATE }}
-        name: "Security Scanner v1.0.0 - ${{ steps.apk_info.outputs.DATE }}"
+        tag_name: v1.2.0-${{ steps.apk_info.outputs.DATE }}
+        name: "Security Scanner v1.2.0 - ${{ steps.apk_info.outputs.DATE }}"
         body: |
-          ## Android Security Scanner v1.0.0
+          ## Android Security Scanner v1.2.0
 
           ### Tính năng:
-          - Theo dõi hoat động mạng (mTim tracking) của tất cả app
           - Quét virus, adware, spyware bằng nhiều phương pháp
+          - Theo dõi hoạt động mạng (mTim tracking) của tất cả app
+          - **LIVE Traffic Monitor** - Theo dõi traffic realtime qua VPN
+          - Cài chứng chỉ CA để giải mã HTTPS
           - Phân tích quyền nguy hiểm
           - Phát hiện typo-squatting và giả mạo
           - Kiểm tra chữ ký số
-          - Phân tích metadata đáng ngờ
-          - Tìm kiếm và lọc theo mức độ đe dọa
           - Hỗ trợ Android 8+ (API 26+)
 
-          ### Hướng dẫn cài đặt:
+          ### Hướng dẫn:
           1. Tải file APK (app-debug.apk)
-          2. Bật "Cài đặt từ nguồn không xác định" trong cài đặt
+          2. Bật "Cài đặt từ nguồn không xác định"
           3. Cài đặt APK
-          4. Cấp quyền "Usage Access" khi app yêu cầu
-          5. Nhấn "Quét bảo mật" để bắt đầu
+          4. Cấp quyền "Usage Access"
+          5. Nhấn "Quét bảo mật" để quét
+          6. Nhấn "Live Monitor" để theo dõi traffic realtime
+          7. Nhấn "Cài Chứng Chỉ" để cài CA cert cho HTTPS
 
           ### Yêu cầu:
-          - Android 8.0 (Oreo) trở lên
+          - Android 8.0+ (API 26+)
           - Quyền Usage Access (bắt buộc)
         files: |
           app/build/outputs/apk/debug/app-debug.apk

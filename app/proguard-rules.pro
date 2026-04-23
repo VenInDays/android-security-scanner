@@ -1,6 +1,13 @@
 # Add project specific ProGuard rules here.
 -keepattributes *Annotation*
 -keep class com.securityscanner.app.** { *; }
--keep class sun.security.x509.** { *; }
--keep class sun.security.util.** { *; }
+-keep class com.securityscanner.app.MainActivity { *; }
+-keep class com.securityscanner.app.LiveMonitorActivity { *; }
+-keep class com.securityscanner.app.TrafficVpnService { *; }
+-keep class com.securityscanner.app.TrafficRecord { *; }
+-keep class com.securityscanner.app.CertUtils { *; }
+-keep class com.securityscanner.app.PacketParser { *; }
+-keep class com.securityscanner.app.TcpRelay { *; }
+-keep class com.securityscanner.app.TrafficListAdapter { *; }
+-keep class com.securityscanner.app.AppListAdapter { *; }
 -dontwarn sun.security.**

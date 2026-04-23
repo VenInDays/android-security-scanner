@@ -15,6 +15,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
@@ -162,12 +163,12 @@ public class LiveMonitorActivity extends AppCompatActivity {
             statusText.setText("VPN: DANG BAT");
             statusText.setTextColor(0xFF4CAF50);
             toggleVpnBtn.setText("Tat VPN");
-            toggleVpnBtn.setBackground(getDrawable(R.drawable.btn_danger));
+            toggleVpnBtn.setBackground(ContextCompat.getDrawable(this, R.drawable.btn_danger));
         } else {
             statusText.setText("VPN: TAT");
             statusText.setTextColor(0xFF666666);
             toggleVpnBtn.setText("Bat Live Monitor");
-            toggleVpnBtn.setBackground(getDrawable(R.drawable.scan_btn_bg));
+            toggleVpnBtn.setBackground(ContextCompat.getDrawable(this, R.drawable.scan_btn_bg));
         }
     }
 
