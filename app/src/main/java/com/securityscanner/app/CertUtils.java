@@ -1,9 +1,10 @@
 package com.securityscanner.app;
 
 import android.content.Context;
-import android.os.Build;
 import android.util.Base64;
+import android.widget.Toast;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
@@ -16,11 +17,12 @@ import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.util.Calendar;
 import java.util.Date;
-import android.widget.Toast;
+
+import javax.security.auth.x500.X500Principal;
 
 /**
  * Generate a self-signed CA certificate for HTTPS MITM.
- * Uses standard JCA APIs with Bouncy Castle style encoding.
+ * Uses only standard JCA APIs that work on Android.
  */
 public class CertUtils {
 
@@ -42,305 +44,296 @@ public class CertUtils {
                 keyGen.initialize(2048, new SecureRandom());
                 KeyPair keyPair = keyGen.generateKeyPair();
 
-                // Create self-signed certificate using standard X509Certificate
                 Date now = new Date();
                 Calendar cal = Calendar.getInstance();
                 cal.setTime(now);
                 cal.add(Calendar.YEAR, 10);
                 Date notAfter = cal.getTime();
 
-                // Use javax.security to build a basic self-signed cert
-                // We'll encode it manually as a DER certificate
-                byte[] certDer = buildSelfSignedCert(
-                        keyPair,
-                        now,
-                        notAfter,
-                        "CN=Security Scanner CA, OU=Security, O=SecurityScanner, L=HCM, ST=HCM, C=VN"
-                );
+                X509Certificate cert = generateSelfSignedCert(keyPair, now, notAfter);
+                byte[] certDer = cert.getEncoded();
 
                 // Save as PEM
-                if (certDer != null && certDer.length > 0) {
-                    FileOutputStream fos = new FileOutputStream(certFile);
-                    fos.write("-----BEGIN CERTIFICATE-----\n".getBytes());
-                    String b64 = Base64.encodeToString(certDer, Base64.NO_WRAP);
-                    StringBuilder sb = new StringBuilder();
-                    for (int i = 0; i < b64.length(); i += 64) {
-                        int end = Math.min(i + 64, b64.length());
-                        sb.append(b64.substring(i, end)).append("\n");
-                    }
-                    fos.write(sb.toString().getBytes());
-                    fos.write("-----END CERTIFICATE-----\n".getBytes());
-                    fos.close();
-
-                    // Also save keystore for VPN service use
-                    saveKeyStore(certDir, keyPair, certDer);
-
-                    android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
-                    mainHandler.post(() -> Toast.makeText(context,
-                            "Da tao chung chi CA thanh cong!", Toast.LENGTH_SHORT).show());
-                } else {
-                    showCertError(context, "Khong the tao certificate DER");
+                FileOutputStream fos = new FileOutputStream(certFile);
+                fos.write("-----BEGIN CERTIFICATE-----\n".getBytes());
+                String b64 = Base64.encodeToString(certDer, Base64.NO_WRAP);
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < b64.length(); i += 64) {
+                    int end = Math.min(i + 64, b64.length());
+                    sb.append(b64.substring(i, end)).append("\n");
                 }
+                fos.write(sb.toString().getBytes());
+                fos.write("-----END CERTIFICATE-----\n".getBytes());
+                fos.close();
+
+                // Save keystore
+                File ksFile = new File(certDir, "ca.keystore");
+                KeyStore ks = KeyStore.getInstance("PKCS12");
+                ks.load(null, null);
+                ks.setKeyEntry(CERT_ALIAS, keyPair.getPrivate(), "changeit".toCharArray(),
+                        new java.security.cert.Certificate[]{cert});
+                OutputStream os = new FileOutputStream(ksFile);
+                ks.store(os, "changeit".toCharArray());
+                os.close();
+
+                android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+                mainHandler.post(() -> Toast.makeText(context,
+                        "Da tao chung chi CA thanh cong!", Toast.LENGTH_SHORT).show());
 
             } catch (final Exception e) {
                 e.printStackTrace();
                 android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
-                mainHandler.post(() -> showCertError(context, e.getMessage()));
+                mainHandler.post(() -> Toast.makeText(context,
+                        "Loi tao chung chi: " + e.getMessage(), Toast.LENGTH_LONG).show());
             }
         }).start();
     }
 
     /**
-     * Build a minimal DER-encoded X.509 self-signed certificate.
+     * Generate a self-signed X509 certificate using standard Java APIs.
+     * Uses a lightweight approach with java.security.cert.CertificateFactory.
      */
-    private static byte[] buildSelfSignedCert(KeyPair keyPair, Date notBefore, Date notAfter, String dn) {
-        try {
-            // Generate a self-signed cert via openssl subprocess (fallback for Android)
-            // Alternative: Use a minimal DER builder
-            return buildMinimalCertDer(keyPair, notBefore, notAfter, dn);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
+    private static X509Certificate generateSelfSignedCert(KeyPair keyPair, Date notBefore, Date notAfter)
+            throws Exception {
+
+        // Build a minimal DER-encoded X.509 certificate using raw ASN.1 encoding
+        byte[] tbsCert = buildTbsCertificate(keyPair, notBefore, notAfter);
+        byte[] signature = signData(keyPair.getPrivate(), tbsCert);
+        byte[] certDer = assembleCertDer(tbsCert, signature, keyPair);
+
+        java.security.cert.CertificateFactory cf =
+                java.security.cert.CertificateFactory.getInstance("X.509");
+        return (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(certDer));
     }
 
     /**
-     * Build a minimal self-signed X.509 v3 certificate in DER format.
-     * Uses raw ASN.1/DER encoding.
+     * Build the To Be Signed (TBS) portion of an X.509 certificate.
      */
-    private static byte[] buildMinimalCertDer(KeyPair keyPair, Date notBefore, Date notAfter, String dn) {
+    private static byte[] buildTbsCertificate(KeyPair keyPair, Date notBefore, Date notAfter) {
         try {
-            java.security.cert.CertificateFactory cf = java.security.cert.CertificateFactory.getInstance("X.509");
+            // Build ASN.1 DER encoded TBS certificate
+            java.io.ByteArrayOutputStream tbsOut = new java.io.ByteArrayOutputStream();
 
-            // Use KeyStore to create a self-signed cert (simplest approach on Android)
-            KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
-            ks.load(null, null);
+            // We'll construct a minimal but valid X.509v3 certificate
+            // Version: v3 (explicit)
+            byte[] versionTag = derTag(0xA0, derTag(2, derInteger(2)));
+            // Serial number
+            byte[] serial = derInteger(BigInteger.valueOf(System.currentTimeMillis()).toByteArray());
+            // Signature algorithm: SHA256withRSA (OID 1.2.840.113549.1.1.11)
+            byte[] sigAlg = derSequence(derOid(new byte[]{42, (byte) 134, 72, (byte) 134, 247, 13, 1, 1, 11}));
+            // Issuer
+            byte[] issuer = buildDistinguishedName("Security Scanner CA");
+            // Validity
+            byte[] validity = derSequence(derTime(notBefore), derTime(notAfter));
+            // Subject
+            byte[] subject = buildDistinguishedName("Security Scanner CA");
+            // Subject Public Key Info
+            byte[] spki = buildSubjectPublicKeyInfo(keyPair.getPublic());
+            // Extensions: Basic Constraints (CA:true), Subject Key Identifier
+            byte[] extensions = buildExtensions(keyPair.getPublic());
 
-            // Generate cert with keytool-like behavior using KeyPairGenerator
-            // On Android, we need to use a different approach
-            // Let's use the built-in sun.security or Conscrypt APIs
+            // Assemble TBS
+            tbsOut.write(versionTag);
+            tbsOut.write(serial);
+            tbsOut.write(sigAlg);
+            tbsOut.write(issuer);
+            tbsOut.write(validity);
+            tbsOut.write(subject);
+            tbsOut.write(spki);
+            tbsOut.write(extensions);
 
-            // Simplest working approach: Use Bouncy Castle if available, or fallback
-            // to generating a PKCS12 keystore with a self-signed cert
-
-            KeyStore p12 = KeyStore.getInstance("PKCS12");
-            p12.load(null, null);
-
-            // Create a certificate chain using java.security.cert.CertPathBuilder
-            // This is the most portable approach
-            javax.security.auth.x500.X500Principal principal =
-                    new javax.security.auth.x500.X500Principal(dn);
-
-            // Use internal API to generate cert (works on most Android devices)
-            try {
-                Class<?> x509CertClass = Class.forName("sun.security.x509.X509CertImpl");
-                java.lang.reflect.Method signMethod = null;
-                for (java.lang.reflect.Method m : x509CertClass.getMethods()) {
-                    if (m.getName().equals("sign") && m.getParameterCount() == 2) {
-                        signMethod = m;
-                        break;
-                    }
-                }
-
-                if (signMethod != null) {
-                    // Full sun.security.x509 path
-                    sun.security.x509.X500Name issuer = new sun.security.x509.X500Name(dn);
-                    sun.security.x509.CertificateValidity validity =
-                            new sun.security.x509.CertificateValidity(notBefore, notAfter);
-                    BigInteger serial = BigInteger.valueOf(System.currentTimeMillis());
-                    sun.security.x509.X509CertInfo certInfo = new sun.security.x509.X509CertInfo();
-                    certInfo.set(sun.security.x509.X509CertInfo.VALIDITY, validity);
-                    certInfo.set(sun.security.x509.X509CertInfo.SERIAL_NUMBER,
-                            new sun.security.x509.CertificateSerialNumber(serial));
-                    certInfo.set(sun.security.x509.X509CertInfo.SUBJECT, issuer);
-                    certInfo.set(sun.security.x509.X509CertInfo.ISSUER, issuer);
-                    certInfo.set(sun.security.x509.X509CertInfo.KEY,
-                            new sun.security.x509.CertificateX509Key(keyPair.getPublic()));
-                    certInfo.set(sun.security.x509.X509CertInfo.VERSION,
-                            new sun.security.x509.CertificateVersion(sun.security.x509.CertificateVersion.V3));
-
-                    // Mark as CA with basic constraints
-                    sun.security.x509.CertificateExtensions ext = new sun.security.x509.CertificateExtensions();
-                    ext.set(sun.security.x509.BasicConstraintsExtension.Name,
-                            new sun.security.x509.BasicConstraintsExtension(true, -1));
-
-                    // Subject Key Identifier
-                    byte[] kidBytes = new sun.security.x509.KeyIdentifier(keyPair.getPublic()).getIdentifier();
-                    ext.set(sun.security.x509.SubjectKeyIdentifierExtension.Name,
-                            new sun.security.x509.SubjectKeyIdentifierExtension(kidBytes));
-
-                    certInfo.set(sun.security.x509.X509CertInfo.EXTENSIONS, ext);
-
-                    sun.security.x509.X509CertImpl cert = new sun.security.x509.X509CertImpl(certInfo);
-                    signMethod.invoke(cert, keyPair.getPrivate(), "SHA256withRSA");
-
-                    return cert.getEncoded();
-                }
-            } catch (ClassNotFoundException e) {
-                // sun.security.x509 not available on this device
-                // Fall through to alternative method
-            }
-
-            // Fallback: generate cert using openssl command
-            return generateCertViaOpenssl(keyPair, notBefore, notAfter, dn);
-
+            return tbsOut.toByteArray();
         } catch (Exception e) {
-            e.printStackTrace();
-            return null;
+            throw new RuntimeException("Failed to build TBS certificate", e);
         }
     }
 
-    /**
-     * Fallback: Generate cert using openssl (if available).
-     */
-    private static byte[] generateCertViaOpenssl(KeyPair keyPair, Date notBefore, Date notAfter, String dn) {
+    private static byte[] buildDistinguishedName(String cn) {
         try {
-            // Use Java's built-in cert generation via KeyStore
-            KeyStore ks = KeyStore.getInstance("PKCS12");
-            ks.load(null, null);
-
-            // Use the java.security.cert.CertificateFactory approach
-            // We create a self-signed certificate programmatically
-            org.bouncycastle.asn1.x500.X500Name x500Name = null;
-
-            // If Bouncy Castle is available
-            try {
-                Class.forName("org.bouncycastle.asn1.x500.X500Name");
-                return generateCertBouncyCastle(keyPair, dn);
-            } catch (ClassNotFoundException e) {
-                // No Bouncy Castle either
-            }
-
-            // Last resort: generate via exec openssl
-            File tempDir = new File(System.getProperty("java.io.tmpdir"), "cert_gen_" + System.currentTimeMillis());
-            tempDir.mkdirs();
-
-            // Write private key
-            File keyFile = new File(tempDir, "ca.key");
-            java.io.DataOutputStream dos = new java.io.DataOutputStream(new FileOutputStream(keyFile));
-            byte[] privBytes = keyPair.getPrivate().getEncoded();
-            // Simple PKCS8 encoding
-            dos.write("-----BEGIN PRIVATE KEY-----\n".getBytes());
-            dos.write(Base64.encode(privBytes, Base64.NO_WRAP).getBytes());
-            dos.write("\n-----END PRIVATE KEY-----\n".getBytes());
-            dos.close();
-
-            // Write CSR config
-            File configFile = new File(tempDir, "openssl.cnf");
-            FileOutputStream fos = new FileOutputStream(configFile);
-            String cnf = "[req]\ndistinguished_name=req_dn\nx509_extensions=v3_ca\n[req_dn]\nCN=Security Scanner CA\n[v3_ca]\nbasicConstraints=critical,CA:true\nkeyUsage=critical,keyCertSign,cRLSign\nsubjectKeyIdentifier=hash\n";
-            fos.write(cnf.getBytes());
-            fos.close();
-
-            ProcessBuilder pb = new ProcessBuilder(
-                    "openssl", "req", "-new", "-x509",
-                    "-key", keyFile.getAbsolutePath(),
-                    "-out", new File(tempDir, "ca.crt").getAbsolutePath(),
-                    "-days", "3650",
-                    "-subj", "/CN=Security Scanner CA/O=SecurityScanner",
-                    "-config", configFile.getAbsolutePath()
-            );
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()));
-            StringBuilder output = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) output.append(line);
-            p.waitFor();
-
-            if (p.exitValue() == 0) {
-                File certOut = new File(tempDir, "ca.crt");
-                if (certOut.exists()) {
-                    java.io.FileInputStream fis = new java.io.FileInputStream(certOut);
-                    byte[] certBytes = new byte[(int) certOut.length()];
-                    fis.read(certBytes);
-                    fis.close();
-                    // Cleanup
-                    keyFile.delete();
-                    configFile.delete();
-                    certOut.delete();
-                    tempDir.delete();
-                    return certBytes;
-                }
-            }
-
-            // Cleanup
-            keyFile.delete();
-            configFile.delete();
-            tempDir.delete();
-
+            // CN=Security Scanner CA, O=SecurityScanner
+            byte[] cnSet = derSet(derSequence(
+                    derOid(new byte[]{85, 4, 3}), // CN OID
+                    derUtf8String(cn)));
+            byte[] oSet = derSet(derSequence(
+                    derOid(new byte[]{85, 4, 10}), // O OID
+                    derUtf8String("SecurityScanner")));
+            return derSequence(cnSet, oSet);
         } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    private static byte[] generateCertBouncyCastle(KeyPair keyPair, String dn) {
-        try {
-            // Use Bouncy Castle if available
-            java.security.Security.addProvider(
-                    new org.bouncycastle.jce.provider.BouncyCastleProvider());
-
-            java.util.Calendar now = java.util.Calendar.getInstance();
-            now.add(java.util.Calendar.YEAR, -1);
-
-            org.bouncycastle.x509.X509V3CertificateGenerator certGen =
-                    new org.bouncycastle.x509.X509V3CertificateGenerator();
-
-            certGen.setSerialNumber(BigInteger.valueOf(System.currentTimeMillis()));
-            certGen.setIssuerDN(new javax.security.auth.x500.X500Principal(dn));
-            certGen.setSubjectDN(new javax.security.auth.x500.X500Principal(dn));
-            certGen.setNotBefore(now.getTime());
-            certGen.setNotAfter(new Date(System.currentTimeMillis() + 10L * 365 * 24 * 60 * 60 * 1000));
-            certGen.setPublicKey(keyPair.getPublic());
-            certGen.setSignatureAlgorithm("SHA256WithRSAEncryption");
-
-            certGen.addExtension(
-                    org.bouncycastle.asn1.x509.X509Extensions.BasicConstraints,
-                    true,
-                    new org.bouncycastle.asn1.x509.BasicConstraints(true));
-
-            certGen.addExtension(
-                    org.bouncycastle.asn1.x509.X509Extensions.KeyUsage,
-                    true,
-                    new org.bouncycastle.asn1.x509.KeyUsage(
-                            org.bouncycastle.asn1.x509.KeyUsage.keyCertSign |
-                            org.bouncycastle.asn1.x509.KeyUsage.cRLSign));
-
-            X509Certificate cert = certGen.generateX509Certificate(keyPair.getPrivate());
-            return cert.getEncoded();
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
+            throw new RuntimeException("Failed to build DN", e);
         }
     }
 
-    private static void saveKeyStore(File certDir, KeyPair keyPair, byte[] certDer) {
+    private static byte[] buildSubjectPublicKeyInfo(java.security.PublicKey pubKey) {
         try {
-            File ksFile = new File(certDir, "ca.keystore");
-            KeyStore ks = KeyStore.getInstance("PKCS12");
-            ks.load(null, null);
-
-            java.security.cert.CertificateFactory cf =
-                    java.security.cert.CertificateFactory.getInstance("X.509");
-            X509Certificate cert = (X509Certificate) cf.generateCertificate(
-                    new java.io.ByteArrayInputStream(certDer));
-
-            ks.setKeyEntry(CERT_ALIAS, keyPair.getPrivate(), "changeit".toCharArray(),
-                    new java.security.cert.Certificate[]{cert});
-
-            OutputStream os = new FileOutputStream(ksFile);
-            ks.store(os, "changeit".toCharArray());
-            os.close();
+            byte[] keyBytes = pubKey.getEncoded(); // X.509 encoded
+            return keyBytes; // SPKI is already the right format
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new RuntimeException("Failed to build SPKI", e);
         }
     }
 
-    /**
-     * Install the generated CA certificate on the device.
-     */
+    private static byte[] buildExtensions(java.security.PublicKey pubKey) {
+        try {
+            // Extensions sequence
+            java.io.ByteArrayOutputStream extOut = new java.io.ByteArrayOutputStream();
+
+            // Basic Constraints extension: CA=true
+            byte[] basicConstraintsValue = derSequence(derBoolean(true), derInteger(-1));
+            byte[] basicConstraints = derSequence(
+                    derOid(new byte[]{55, 29, 19}), // basicConstraints OID
+                    derOctetString(basicConstraintsValue));
+            extOut.write(basicConstraints);
+
+            // Subject Key Identifier extension
+            byte[] skiValue = computeKeyId(pubKey);
+            byte[] ski = derSequence(
+                    derOid(new byte[]{55, 29, 14}), // subjectKeyIdentifier OID
+                    derOctetString(skiValue));
+            extOut.write(ski);
+
+            // Key Usage extension: keyCertSign + cRLSign
+            byte[] kuValue = derBitString(new byte[]{(byte) 0xA0}, 3); // bits 1,3,4 (unused, keyCertSign=5, cRLSign=6)
+            byte[] ku = derSequence(
+                    derOid(new byte[]{55, 29, 15}), // keyUsage OID
+                    derOctetString(kuValue));
+            extOut.write(ku);
+
+            // Wrap in [3] EXPLICIT tag
+            return derExplicitTag(3, extOut.toByteArray());
+        } catch (Exception e) {
+            // If extensions fail, return empty
+            return new byte[0];
+        }
+    }
+
+    private static byte[] computeKeyId(java.security.PublicKey pubKey) {
+        try {
+            java.security.MessageDigest sha = java.security.MessageDigest.getInstance("SHA-1");
+            return sha.digest(pubKey.getEncoded());
+        } catch (Exception e) {
+            return new byte[20];
+        }
+    }
+
+    private static byte[] signData(PrivateKey privateKey, byte[] data) throws Exception {
+        java.security.Signature sig = java.security.Signature.getInstance("SHA256withRSA");
+        sig.initSign(privateKey);
+        sig.update(data);
+        return sig.sign();
+    }
+
+    private static byte[] assembleCertDer(byte[] tbs, byte[] signature, KeyPair keyPair) {
+        try {
+            // Signature algorithm
+            byte[] sigAlg = derSequence(derOid(new byte[]{42, (byte) 134, 72, (byte) 134, 247, 13, 1, 1, 11}));
+            // Signature value
+            byte[] sigValue = derBitString(signature);
+
+            // Certificate = SEQUENCE { tbs, sigAlg, sigValue }
+            return derSequence(tbs, sigAlg, sigValue);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to assemble cert DER", e);
+        }
+    }
+
+    // ---- DER/ASN.1 encoding helpers ----
+
+    private static byte[] derTag(int tag, byte[] value) {
+        try {
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            out.write(tag);
+            writeLength(out, value.length);
+            out.write(value);
+            return out.toByteArray();
+        } catch (Exception e) { throw new RuntimeException(e); }
+    }
+
+    private static byte[] derExplicitTag(int tagNum, byte[] value) {
+        return derTag(0xA0 | tagNum, value);
+    }
+
+    private static byte[] derSequence(byte[]... elements) {
+        try {
+            java.io.ByteArrayOutputStream content = new java.io.ByteArrayOutputStream();
+            for (byte[] e : elements) content.write(e);
+            return derTag(0x30, content.toByteArray());
+        } catch (Exception e) { throw new RuntimeException(e); }
+    }
+
+    private static byte[] derSet(byte[]... elements) {
+        try {
+            java.io.ByteArrayOutputStream content = new java.io.ByteArrayOutputStream();
+            for (byte[] e : elements) content.write(e);
+            return derTag(0x31, content.toByteArray());
+        } catch (Exception e) { throw new RuntimeException(e); }
+    }
+
+    private static byte[] derInteger(byte[] value) {
+        return derTag(0x02, value);
+    }
+
+    private static byte[] derInteger(int value) {
+        return derTag(0x02, new byte[]{(byte) value});
+    }
+
+    private static byte[] derBoolean(boolean value) {
+        return derTag(0x01, new byte[]{(byte) (value ? 0xFF : 0x00)});
+    }
+
+    private static byte[] derOid(byte[] oidBytes) {
+        return derTag(0x06, oidBytes);
+    }
+
+    private static byte[] derUtf8String(String s) throws Exception {
+        return derTag(0x0C, s.getBytes("UTF-8"));
+    }
+
+    private static byte[] derOctetString(byte[] value) {
+        return derTag(0x04, value);
+    }
+
+    private static byte[] derBitString(byte[] value) {
+        return derBitString(value, 0);
+    }
+
+    private static byte[] derBitString(byte[] value, int unusedBits) {
+        try {
+            byte[] tagged = new byte[value.length + 1];
+            tagged[0] = (byte) unusedBits;
+            System.arraycopy(value, 0, tagged, 1, value.length);
+            return derTag(0x03, tagged);
+        } catch (Exception e) { throw new RuntimeException(e); }
+    }
+
+    private static byte[] derTime(Date date) {
+        String format = "yyMMddHHmmssZ";
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat(format, java.util.Locale.US);
+        sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+        try {
+            return derTag(0x17, sdf.format(date).getBytes("UTF-8"));
+        } catch (Exception e) { throw new RuntimeException(e); }
+    }
+
+    private static void writeLength(java.io.ByteArrayOutputStream out, int length) {
+        if (length < 128) {
+            out.write(length);
+        } else if (length < 256) {
+            out.write(0x81);
+            out.write(length);
+        } else if (length < 65536) {
+            out.write(0x82);
+            out.write((length >> 8) & 0xFF);
+            out.write(length & 0xFF);
+        } else {
+            out.write(0x83);
+            out.write((length >> 16) & 0xFF);
+            out.write((length >> 8) & 0xFF);
+            out.write(length & 0xFF);
+        }
+    }
+
+    // ---- Public methods ----
+
     public static void installCertificate(Context context) {
         try {
             File certDir = new File(context.getExternalFilesDir(null), "certs");
@@ -353,25 +346,19 @@ public class CertUtils {
                 return;
             }
 
+            android.net.Uri certUri = androidx.core.content.FileProvider.getUriForFile(
+                    context, context.getPackageName() + ".fileprovider", certFile);
+
             Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setDataAndType(
-                    androidx.core.content.FileProvider.getUriForFile(
-                            context,
-                            context.getPackageName() + ".fileprovider",
-                            certFile),
-                    "application/x-x509-ca-cert");
+            intent.setDataAndType(certUri, "application/x-x509-ca-cert");
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startActivity(intent);
-
         } catch (Exception e) {
             e.printStackTrace();
             openCertSettings(context);
         }
     }
 
-    /**
-     * Open certificate settings so user can manually install.
-     */
     public static void openCertSettings(Context context) {
         try {
             Intent intent = new Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS);
@@ -393,9 +380,5 @@ public class CertUtils {
     public static String getKeyStorePath(Context context) {
         File ksFile = new File(context.getExternalFilesDir(null), "certs/ca.keystore");
         return ksFile.exists() ? ksFile.getAbsolutePath() : null;
-    }
-
-    private static void showCertError(Context context, String msg) {
-        Toast.makeText(context, "Loi: " + msg, Toast.LENGTH_LONG).show();
     }
 }
