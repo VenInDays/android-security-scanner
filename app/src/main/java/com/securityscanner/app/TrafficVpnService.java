@@ -71,12 +71,8 @@ public class TrafficVpnService extends VpnService {
                 .setBlocking(true)
                 .setMtu(MTU);
 
-        // Allow all apps (or specific apps)
-        builder.addAllowedApplication("com.android.chrome");
-        builder.addAllowedApplication("com.android.vending");
-        builder.addAllowedApplication("com.google.android.gms");
-
-        // Block nothing - monitor everything
+        // Route all traffic through VPN for monitoring
+        // Don't restrict to specific apps - capture everything
         try {
             tunFd = builder.establish();
         } catch (Exception e) {
@@ -243,15 +239,7 @@ public class TrafficVpnService extends VpnService {
     }
 
     private void resolvePackageName(TrafficRecord record, int srcPort) {
-        // Map port to app - approximate method
-        try {
-            PackageManager pm = getPackageManager();
-            // Try to find by known ports or use a mapping
-            String pkg = "unknown";
-            record.setPackageName(pkg);
-        } catch (Exception e) {
-            record.setPackageName("unknown");
-        }
+        record.setPackageName("app:" + srcPort);
     }
 
     public void setRecordPackageName(TrafficRecord record, int uid) {
