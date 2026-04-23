@@ -17,11 +17,10 @@
         android:gravity="center_vertical">
 
         <LinearLayout
-            android:layout_width="wrap_content"
+            android:layout_width="50dp"
             android:layout_height="wrap_content"
-            android:orientation="column"
-            android:gravity="center"
-            android:minWidth="50dp">
+            android:orientation="vertical"
+            android:gravity="center">
 
             <TextView
                 android:id="@+id/traffic_direction"
@@ -83,7 +82,7 @@
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="column"
+            android:orientation="vertical"
             android:gravity="end">
 
             <TextView
