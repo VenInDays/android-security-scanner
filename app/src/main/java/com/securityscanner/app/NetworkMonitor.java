@@ -4,9 +4,7 @@ import android.app.usage.NetworkStats;
 import android.app.usage.NetworkStatsManager;
 import android.content.Context;
 import android.net.ConnectivityManager;
-import android.os.Build;
 import android.os.RemoteException;
-import android.telephony.TelephonyManager;
 
 import java.util.Calendar;
 import java.util.Date;
@@ -54,7 +52,7 @@ public class NetworkMonitor {
         // Query mobile data
         try {
             NetworkStats mobileStats = networkStatsManager.querySummary(
-                    TelephonyManager.DATA_USAGE_SOURCE_MOBILE,
+                    ConnectivityManager.TYPE_MOBILE,
                     null, startTime, endTime);
 
             NetworkStats.Bucket bucket = new NetworkStats.Bucket();

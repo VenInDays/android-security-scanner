@@ -35,6 +35,10 @@ public class AppListAdapter extends RecyclerView.Adapter<AppListAdapter.ViewHold
         this.context = context;
     }
 
+    public FilterMode getFilterMode() {
+        return filterMode;
+    }
+
     public void setOnAppClickListener(OnAppClickListener listener) {
         this.clickListener = listener;
     }
