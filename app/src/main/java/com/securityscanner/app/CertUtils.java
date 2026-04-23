@@ -8,7 +8,6 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
-import java.math.BigInteger;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
@@ -19,9 +18,6 @@ import java.util.Calendar;
 import java.util.Date;
 
 import android.content.Intent;
-import android.net.Uri;
-
-import javax.security.auth.x500.X500Principal;
 
 /**
  * Generate a self-signed CA certificate for HTTPS MITM.
@@ -32,9 +28,6 @@ public class CertUtils {
     private static final String CERT_ALIAS = "SecurityScannerCA";
     private static final String CERT_FILE = "scanner_ca.crt";
 
-    /**
-     * Generate a self-signed CA certificate and save as PEM.
-     */
     public static void generateAndSaveCert(Context context) {
         new Thread(() -> {
             try {
@@ -42,7 +35,6 @@ public class CertUtils {
                 if (!certDir.exists()) certDir.mkdirs();
                 File certFile = new File(certDir, CERT_FILE);
 
-                // Generate RSA key pair
                 KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
                 keyGen.initialize(2048, new SecureRandom());
                 KeyPair keyPair = keyGen.generateKeyPair();
@@ -56,7 +48,6 @@ public class CertUtils {
                 X509Certificate cert = generateSelfSignedCert(keyPair, now, notAfter);
                 byte[] certDer = cert.getEncoded();
 
-                // Save as PEM
                 FileOutputStream fos = new FileOutputStream(certFile);
                 fos.write("-----BEGIN CERTIFICATE-----\n".getBytes());
                 String b64 = Base64.encodeToString(certDer, Base64.NO_WRAP);
@@ -69,7 +60,6 @@ public class CertUtils {
                 fos.write("-----END CERTIFICATE-----\n".getBytes());
                 fos.close();
 
-                // Save keystore
                 File ksFile = new File(certDir, "ca.keystore");
                 KeyStore ks = KeyStore.getInstance("PKCS12");
                 ks.load(null, null);
@@ -92,50 +82,51 @@ public class CertUtils {
         }).start();
     }
 
-    /**
-     * Generate a self-signed X509 certificate using standard Java APIs.
-     * Uses a lightweight approach with java.security.cert.CertificateFactory.
-     */
     private static X509Certificate generateSelfSignedCert(KeyPair keyPair, Date notBefore, Date notAfter)
             throws Exception {
-
-        // Build a minimal DER-encoded X.509 certificate using raw ASN.1 encoding
         byte[] tbsCert = buildTbsCertificate(keyPair, notBefore, notAfter);
         byte[] signature = signData(keyPair.getPrivate(), tbsCert);
-        byte[] certDer = assembleCertDer(tbsCert, signature, keyPair);
+        byte[] certDer = assembleCertDer(tbsCert, signature);
 
         java.security.cert.CertificateFactory cf =
                 java.security.cert.CertificateFactory.getInstance("X.509");
         return (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(certDer));
     }
 
-    /**
-     * Build the To Be Signed (TBS) portion of an X.509 certificate.
-     */
     private static byte[] buildTbsCertificate(KeyPair keyPair, Date notBefore, Date notAfter) {
         try {
-            // Build ASN.1 DER encoded TBS certificate
             java.io.ByteArrayOutputStream tbsOut = new java.io.ByteArrayOutputStream();
 
-            // We'll construct a minimal but valid X.509v3 certificate
-            // Version: v3 (explicit)
-            byte[] versionTag = derTag(0xA0, derTag(2, derInteger(2)));
-            // Serial number
-            byte[] serial = derInteger(BigInteger.valueOf(System.currentTimeMillis()).toByteArray());
-            // Signature algorithm: SHA256withRSA (OID 1.2.840.113549.1.1.11)
-            byte[] sigAlg = derSequence(derOid(new byte[]{(byte)42, (byte)134, (byte)72, (byte)134, (byte)247, 13, 1, 1, 11}));
-            // Issuer
-            byte[] issuer = buildDistinguishedName("Security Scanner CA");
+            // Version: v3 (explicit context tag [0])
+            byte[] versionTag = derExplicitTag(0, derInteger(2));
+
+            // Serial number (random 16 bytes, ensure positive)
+            SecureRandom rng = new SecureRandom();
+            byte[] serialBytes = new byte[16];
+            rng.nextBytes(serialBytes);
+            serialBytes[0] &= 0x7F;
+            byte[] serial = derIntegerBytes(serialBytes);
+
+            // Signature algorithm: SHA256withRSA with NULL parameter
+            byte[] sigAlg = derSequence(
+                    derOid(new byte[]{(byte) 42, (byte) 134, (byte) 72, (byte) 134, (byte) 247, 13, 1, 1, 11}),
+                    derNull());
+
+            // Issuer DN: CN=Security Scanner CA, O=SecurityScanner
+            byte[] issuer = buildDistinguishedName();
+
             // Validity
             byte[] validity = derSequence(derTime(notBefore), derTime(notAfter));
-            // Subject
-            byte[] subject = buildDistinguishedName("Security Scanner CA");
-            // Subject Public Key Info
-            byte[] spki = buildSubjectPublicKeyInfo(keyPair.getPublic());
-            // Extensions: Basic Constraints (CA:true), Subject Key Identifier
+
+            // Subject DN (same as issuer)
+            byte[] subject = buildDistinguishedName();
+
+            // Subject Public Key Info (X.509 SPKI encoded)
+            byte[] spki = keyPair.getPublic().getEncoded();
+
+            // Extensions
             byte[] extensions = buildExtensions(keyPair.getPublic());
 
-            // Assemble TBS
             tbsOut.write(versionTag);
             tbsOut.write(serial);
             tbsOut.write(sigAlg);
@@ -151,60 +142,53 @@ public class CertUtils {
         }
     }
 
-    private static byte[] buildDistinguishedName(String cn) {
+    private static byte[] buildDistinguishedName() {
         try {
-            // CN=Security Scanner CA, O=SecurityScanner
-            byte[] cnSet = derSet(derSequence(
-                    derOid(new byte[]{85, 4, 3}), // CN OID
-                    derUtf8String(cn)));
-            byte[] oSet = derSet(derSequence(
-                    derOid(new byte[]{85, 4, 10}), // O OID
-                    derUtf8String("SecurityScanner")));
+            byte[] cnAttrTypeAndValue = derSequence(
+                    derOid(new byte[]{85, 4, 3}),
+                    derPrintableString("Security Scanner CA"));
+            byte[] cnSet = derSet(cnAttrTypeAndValue);
+
+            byte[] oAttrTypeAndValue = derSequence(
+                    derOid(new byte[]{85, 4, 10}),
+                    derPrintableString("SecurityScanner"));
+            byte[] oSet = derSet(oAttrTypeAndValue);
+
             return derSequence(cnSet, oSet);
         } catch (Exception e) {
             throw new RuntimeException("Failed to build DN", e);
         }
     }
 
-    private static byte[] buildSubjectPublicKeyInfo(java.security.PublicKey pubKey) {
-        try {
-            byte[] keyBytes = pubKey.getEncoded(); // X.509 encoded
-            return keyBytes; // SPKI is already the right format
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to build SPKI", e);
-        }
-    }
-
     private static byte[] buildExtensions(java.security.PublicKey pubKey) {
         try {
-            // Extensions sequence
             java.io.ByteArrayOutputStream extOut = new java.io.ByteArrayOutputStream();
 
-            // Basic Constraints extension: CA=true
-            byte[] basicConstraintsValue = derSequence(derBoolean(true), derInteger(-1));
+            // Basic Constraints: CA=true, pathLen=unlimited
+            byte[] bcValue = derSequence(derBoolean(true), derInteger(-1));
             byte[] basicConstraints = derSequence(
-                    derOid(new byte[]{55, 29, 19}), // basicConstraints OID
-                    derOctetString(basicConstraintsValue));
+                    derOid(new byte[]{55, 29, 19}),
+                    derOctetString(bcValue));
             extOut.write(basicConstraints);
 
-            // Subject Key Identifier extension
+            // Subject Key Identifier
             byte[] skiValue = computeKeyId(pubKey);
             byte[] ski = derSequence(
-                    derOid(new byte[]{55, 29, 14}), // subjectKeyIdentifier OID
+                    derOid(new byte[]{55, 29, 14}),
                     derOctetString(skiValue));
             extOut.write(ski);
 
-            // Key Usage extension: keyCertSign + cRLSign
-            byte[] kuValue = derBitString(new byte[]{(byte) 0xA0}, 3); // bits 1,3,4 (unused, keyCertSign=5, cRLSign=6)
+            // Key Usage: keyCertSign (bit 5) + cRLSign (bit 6)
+            byte[] kuValue = derBitString(new byte[]{(byte) 0x06}, 1);
             byte[] ku = derSequence(
-                    derOid(new byte[]{55, 29, 15}), // keyUsage OID
+                    derOid(new byte[]{55, 29, 15}),
                     derOctetString(kuValue));
             extOut.write(ku);
 
-            // Wrap in [3] EXPLICIT tag
-            return derExplicitTag(3, extOut.toByteArray());
+            // [3] EXPLICIT SEQUENCE { extensions }
+            byte[] extSeq = derSequence(extOut.toByteArray());
+            return derExplicitTag(3, extSeq);
         } catch (Exception e) {
-            // If extensions fail, return empty
             return new byte[0];
         }
     }
@@ -225,21 +209,19 @@ public class CertUtils {
         return sig.sign();
     }
 
-    private static byte[] assembleCertDer(byte[] tbs, byte[] signature, KeyPair keyPair) {
+    private static byte[] assembleCertDer(byte[] tbs, byte[] signature) {
         try {
-            // Signature algorithm
-            byte[] sigAlg = derSequence(derOid(new byte[]{(byte)42, (byte)134, (byte)72, (byte)134, (byte)247, 13, 1, 1, 11}));
-            // Signature value
-            byte[] sigValue = derBitString(signature);
-
-            // Certificate = SEQUENCE { tbs, sigAlg, sigValue }
+            byte[] sigAlg = derSequence(
+                    derOid(new byte[]{(byte) 42, (byte) 134, (byte) 72, (byte) 134, (byte) 247, 13, 1, 1, 11}),
+                    derNull());
+            byte[] sigValue = derBitString(signature, 0);
             return derSequence(tbs, sigAlg, sigValue);
         } catch (Exception e) {
             throw new RuntimeException("Failed to assemble cert DER", e);
         }
     }
 
-    // ---- DER/ASN.1 encoding helpers ----
+    // ---- DER helpers ----
 
     private static byte[] derTag(int tag, byte[] value) {
         try {
@@ -271,12 +253,31 @@ public class CertUtils {
         } catch (Exception e) { throw new RuntimeException(e); }
     }
 
-    private static byte[] derInteger(byte[] value) {
+    private static byte[] derIntegerBytes(byte[] value) {
+        if (value.length > 0 && (value[0] & 0x80) != 0) {
+            byte[] padded = new byte[value.length + 1];
+            System.arraycopy(value, 0, padded, 1, value.length);
+            return derTag(0x02, padded);
+        }
         return derTag(0x02, value);
     }
 
     private static byte[] derInteger(int value) {
-        return derTag(0x02, new byte[]{(byte) value});
+        if (value >= -128 && value < 128) {
+            return derTag(0x02, new byte[]{(byte) value});
+        } else if (value >= -32768 && value < 32768) {
+            return derTag(0x02, new byte[]{
+                    (byte) ((value >> 8) & 0xFF),
+                    (byte) (value & 0xFF)
+            });
+        } else {
+            return derTag(0x02, new byte[]{
+                    (byte) ((value >> 24) & 0xFF),
+                    (byte) ((value >> 16) & 0xFF),
+                    (byte) ((value >> 8) & 0xFF),
+                    (byte) (value & 0xFF)
+            });
+        }
     }
 
     private static byte[] derBoolean(boolean value) {
@@ -287,16 +288,16 @@ public class CertUtils {
         return derTag(0x06, oidBytes);
     }
 
-    private static byte[] derUtf8String(String s) throws Exception {
-        return derTag(0x0C, s.getBytes("UTF-8"));
+    private static byte[] derNull() {
+        return derTag(0x05, new byte[0]);
+    }
+
+    private static byte[] derPrintableString(String s) throws Exception {
+        return derTag(0x13, s.getBytes("US-ASCII"));
     }
 
     private static byte[] derOctetString(byte[] value) {
         return derTag(0x04, value);
-    }
-
-    private static byte[] derBitString(byte[] value) {
-        return derBitString(value, 0);
     }
 
     private static byte[] derBitString(byte[] value, int unusedBits) {
@@ -309,11 +310,21 @@ public class CertUtils {
     }
 
     private static byte[] derTime(Date date) {
-        String format = "yyMMddHHmmssZ";
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(date);
+        String format;
+        int tag;
+        if (cal.get(Calendar.YEAR) < 2050) {
+            format = "yyMMddHHmmss'Z'";
+            tag = 0x17;
+        } else {
+            format = "yyyyMMddHHmmss'Z'";
+            tag = 0x18;
+        }
         java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat(format, java.util.Locale.US);
         sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
         try {
-            return derTag(0x17, sdf.format(date).getBytes("UTF-8"));
+            return derTag(tag, sdf.format(date).getBytes("US-ASCII"));
         } catch (Exception e) { throw new RuntimeException(e); }
     }
 

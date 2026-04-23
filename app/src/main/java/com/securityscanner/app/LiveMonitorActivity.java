@@ -83,7 +83,7 @@ public class LiveMonitorActivity extends AppCompatActivity {
         clearBtn.setOnClickListener(v -> {
             TrafficRecord.clearRecords();
             adapter.updateData(new ArrayList<>());
-            statsText.setText("Tong: 0 | Gui: 0 | Nhan: 0");
+            statsText.setText("Tong: 0 | Gui: 0 | Nhan: 0 | App: 0");
             Toast.makeText(this, "Da xoa toan bo traffic log", Toast.LENGTH_SHORT).show();
         });
 
@@ -149,9 +149,27 @@ public class LiveMonitorActivity extends AppCompatActivity {
         Toast.makeText(this, "VPN da bat - Dang theo doi traffic", Toast.LENGTH_SHORT).show();
     }
 
+    /**
+     * Stop VPN by sending STOP action to the service.
+     * The service handles clean shutdown (stopForeground + close TUN + stopSelf).
+     */
     private void stopVpn() {
-        Intent intent = new Intent(this, TrafficVpnService.class);
-        stopService(intent);
+        try {
+            // Send STOP action to the service
+            Intent intent = new Intent(this, TrafficVpnService.class);
+            intent.setAction(TrafficVpnService.ACTION_STOP);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent);
+            } else {
+                startService(intent);
+            }
+
+            // Also call stopService as backup
+            stopService(new Intent(this, TrafficVpnService.class));
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         isVpnActive = false;
         updateVpnUi();
         stopAutoRefresh();
@@ -177,10 +195,10 @@ public class LiveMonitorActivity extends AppCompatActivity {
             @Override
             public void run() {
                 updateTrafficList();
-                handler.postDelayed(this, 1000);
+                handler.postDelayed(this, 1500);
             }
         };
-        handler.postDelayed(updateRunnable, 1000);
+        handler.postDelayed(updateRunnable, 1500);
     }
 
     private void stopAutoRefresh() {
@@ -197,12 +215,16 @@ public class LiveMonitorActivity extends AppCompatActivity {
         adapter.updateData(reversed);
 
         int sent = 0, received = 0;
+        java.util.HashSet<String> uniqueApps = new java.util.HashSet<>();
         for (TrafficRecord r : records) {
             if (r.getDirection() == TrafficRecord.Direction.SENT) sent++;
             else received++;
+            if (r.getAppName() != null && !r.getAppName().isEmpty()) {
+                uniqueApps.add(r.getAppName());
+            }
         }
-        statsText.setText(String.format("Tong: %d | Gui: %d | Nhan: %d",
-                records.size(), sent, received));
+        statsText.setText(String.format("Tong: %d | Gui: %d | Nhan: %d | App: %d",
+                records.size(), sent, received, uniqueApps.size()));
     }
 
     private void showTrafficDetail(TrafficRecord record) {
@@ -218,7 +240,16 @@ public class LiveMonitorActivity extends AppCompatActivity {
 
         dirView.setText(record.getDirection().getLabel());
         dirView.setTextColor(record.getDirection().getColor());
-        protoView.setText("Giao thuc: " + record.getProtocol().name());
+
+        StringBuilder protoInfo = new StringBuilder("Giao thuc: " + record.getProtocol().name());
+        if (record.getAppName() != null && !record.getAppName().isEmpty()) {
+            protoInfo.append("\nApp: ").append(record.getAppName());
+        }
+        if (record.getPackageName() != null && !record.getPackageName().isEmpty()) {
+            protoInfo.append(" (").append(record.getPackageName()).append(")");
+        }
+        protoView.setText(protoInfo.toString());
+
         connView.setText(
                 (record.getDirection() == TrafficRecord.Direction.SENT ?
                         record.getSrcIp() + ":" + record.getSrcPort() + " -> " +
@@ -265,7 +296,7 @@ public class LiveMonitorActivity extends AppCompatActivity {
                 .setView(detailView)
                 .setPositiveButton("OK", null)
                 .setNeutralButton("Copy", (d, which) -> {
-                    String text = connView.getText() + "\n" + contentView.getText();
+                    String text = protoView.getText() + "\n" + connView.getText() + "\n" + contentView.getText();
                     android.content.ClipboardManager clipboard =
                             (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
                     if (clipboard != null) {

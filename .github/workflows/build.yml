@@ -45,33 +45,34 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: v1.2.0-${{ steps.apk_info.outputs.DATE }}
-        name: "Security Scanner v1.2.0 - ${{ steps.apk_info.outputs.DATE }}"
+        tag_name: v1.3.0-${{ steps.apk_info.outputs.DATE }}
+        name: "Security Scanner v1.3.0 - ${{ steps.apk_info.outputs.DATE }}"
         body: |
-          ## Android Security Scanner v1.2.0
+          ## Android Security Scanner v1.3.0
 
-          ### Tính năng:
-          - Quét virus, adware, spyware bằng nhiều phương pháp
-          - Theo dõi hoạt động mạng (mTim tracking) của tất cả app
-          - **LIVE Traffic Monitor** - Theo dõi traffic realtime qua VPN
-          - Cài chứng chỉ CA để giải mã HTTPS
-          - Phân tích quyền nguy hiểm
-          - Phát hiện typo-squatting và giả mạo
-          - Kiểm tra chữ ký số
-          - Hỗ trợ Android 8+ (API 26+)
+          ### Fix:
+          - Fix loi tao chung chi CA (WRONG_TAG ASN.1) - certificate generation hoat dong chinh xac
+          - Fix loi khong tat duoc VPN - toggle VPN bat/tat binh thuong
+          - Cai tien Live Monitor: nhom traffic theo ten app, hien thi URL day du
+          - Bat duoc toan bo HTTP/HTTPS, WebView, web browsing, video URLs
+          - Hien thi content-type (JPEG, PNG, HTML, JSON, Video...) cho binary data
 
-          ### Hướng dẫn:
-          1. Tải file APK (app-debug.apk)
-          2. Bật "Cài đặt từ nguồn không xác định"
-          3. Cài đặt APK
-          4. Cấp quyền "Usage Access"
-          5. Nhấn "Quét bảo mật" để quét
-          6. Nhấn "Live Monitor" để theo dõi traffic realtime
-          7. Nhấn "Cài Chứng Chỉ" để cài CA cert cho HTTPS
+          ### Tinh nang:
+          - Quet virus, adware, spyware
+          - Theo doi hoat dong mang cua tat ca app
+          - LIVE Traffic Monitor - theo doi traffic realtime qua VPN
+          - Nhom traffic theo app name/package (giao dien gọn gang)
+          - Cai chung chi CA de giai ma HTTPS
+          - Ho tro Android 8+ (API 26+)
 
-          ### Yêu cầu:
-          - Android 8.0+ (API 26+)
-          - Quyền Usage Access (bắt buộc)
+          ### Huong dan:
+          1. Tai file APK (app-debug.apk)
+          2. Bat "Cai dat tu nguon khong xac dinh"
+          3. Cai dat APK
+          4. Cap quyen "Usage Access"
+          5. Nhan "Quet bao mat" de quet
+          6. Nhan "Live Monitor" de theo doi traffic realtime
+          7. Nhan "Cai Chung Chi" de cai CA cert cho HTTPS
         files: |
           app/build/outputs/apk/debug/app-debug.apk
           app/build/outputs/apk/release/app-release-unsigned.apk

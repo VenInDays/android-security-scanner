@@ -28,6 +28,7 @@ public class TrafficRecord {
 
     private long timestamp;
     private String packageName;
+    private String appName;
     private int uid;
     private String srcIp;
     private int srcPort;
@@ -46,7 +47,7 @@ public class TrafficRecord {
 
     private static final List<TrafficRecord> liveRecords =
             Collections.synchronizedList(new ArrayList<TrafficRecord>());
-    private static final int MAX_RECORDS = 500;
+    private static final int MAX_RECORDS = 1000;
 
     public TrafficRecord() {
         this.timestamp = System.currentTimeMillis();
@@ -73,6 +74,9 @@ public class TrafficRecord {
 
     public String getPackageName() { return packageName; }
     public void setPackageName(String packageName) { this.packageName = packageName; }
+
+    public String getAppName() { return appName; }
+    public void setAppName(String appName) { this.appName = appName; }
 
     public int getUid() { return uid; }
     public void setUid(int uid) { this.uid = uid; }

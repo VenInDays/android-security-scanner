@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#263238"
+    android:paddingStart="12dp"
+    android:paddingEnd="12dp"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp"
+    android:layout_marginTop="4dp"
+    android:layout_marginBottom="1dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/group_name"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="App Name"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="#4CAF50"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/group_count"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0 req | 0 B"
+            android:textSize="11sp"
+            android:textColor="#90A4AE" />
+
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/group_package"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="com.example.app"
+        android:textSize="10sp"
+        android:textColor="#607D8B"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:layout_marginTop="1dp" />
+
+</LinearLayout>
